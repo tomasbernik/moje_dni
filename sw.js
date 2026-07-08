@@ -1,9 +1,12 @@
-const CACHE_NAME = "moje-dni-v6";
+const CACHE_NAME = "moje-dni-v7";
 const ASSETS = [
   "./",
   "./index.html",
   "./styles.css",
   "./app.js",
+  "./icon.svg",
+  "./icon-192.png",
+  "./icon-512.png",
   "./manifest.webmanifest",
 ];
 
