@@ -21,9 +21,8 @@ const elements = {
   toast: document.querySelector("#statusToast"),
   cloudStatus: document.querySelector("#cloudStatus"),
   authForm: document.querySelector("#authForm"),
-  authEmail: document.querySelector("#authEmail"),
+  authUsername: document.querySelector("#authUsername"),
   authPassword: document.querySelector("#authPassword"),
-  signUpButton: document.querySelector("#signUpButton"),
   signOutButton: document.querySelector("#signOutButton"),
   syncLocalButton: document.querySelector("#syncLocalButton"),
 };
@@ -64,7 +63,6 @@ function bindEvents() {
   elements.exportBackup.addEventListener("click", exportBackup);
   elements.importBackup.addEventListener("change", importBackup);
   elements.authForm.addEventListener("submit", handleSignIn);
-  elements.signUpButton.addEventListener("click", handleSignUp);
   elements.signOutButton.addEventListener("click", handleSignOut);
   elements.syncLocalButton.addEventListener("click", syncLocalEntriesToCloud);
 }
@@ -178,8 +176,7 @@ function hasSupabaseConfig() {
 }
 
 function setAuthControls(isSignedIn) {
-  elements.authEmail.disabled = isSignedIn;
-  elements.authPassword.disabled = isSignedIn;
+  elements.authForm.classList.toggle("hidden", isSignedIn);
   elements.signOutButton.disabled = !isSignedIn;
   elements.syncLocalButton.disabled = !isSignedIn;
 }
@@ -191,46 +188,71 @@ function setCloudStatus(message) {
 async function handleSignIn(event) {
   event.preventDefault();
   if (!supabase) {
-    showToast("Najprv dopln Supabase config.");
+    showToast("Supabase sa este nenacital.");
     return;
   }
 
-  const email = elements.authEmail.value.trim();
+  const rawUsername = elements.authUsername.value;
+  const username = normalizeUsername(rawUsername);
   const password = elements.authPassword.value;
-  if (!email || !password) {
-    showToast("Zadaj email aj heslo.");
+  if (!username || !password) {
+    showToast("Zadaj meno aj heslo.");
     return;
   }
 
-  const { error } = await supabase.auth.signInWithPassword({ email, password });
-  if (error) {
-    showToast(error.message);
-    return;
-  }
-  elements.authPassword.value = "";
-  showToast("Prihlasene.");
-}
-
-async function handleSignUp() {
-  if (!supabase) {
-    showToast("Najprv dopln Supabase config.");
+  if (username.length < 3) {
+    showToast("Meno musi mat aspon 3 znaky.");
     return;
   }
 
-  const email = elements.authEmail.value.trim();
-  const password = elements.authPassword.value;
-  if (!email || password.length < 6) {
+  if (password.length < 6) {
     showToast("Heslo musi mat aspon 6 znakov.");
     return;
   }
 
-  const { error } = await supabase.auth.signUp({ email, password });
-  if (error) {
-    showToast(error.message);
+  if (username !== rawUsername.trim().toLowerCase()) {
+    elements.authUsername.value = username;
+    showToast("Meno moze obsahovat len pismena bez diakritiky, cisla, _ alebo -.");
     return;
   }
+
+  const email = authEmailForUsername(username);
+  setCloudStatus("Prihlasujem");
+  let { data, error } = await supabase.auth.signInWithPassword({ email, password });
+
+  if (error) {
+    const signup = await supabase.auth.signUp({
+      email,
+      password,
+      options: { data: { username } },
+    });
+    data = signup.data;
+    error = signup.error;
+
+    if (error && /already|registered|exists/i.test(error.message)) {
+      showToast("Toto meno uz existuje. Skus spravne heslo.");
+      setCloudStatus("Supabase pripraveny");
+      return;
+    }
+  }
+
+  if (error) {
+    showToast(error.message);
+    setCloudStatus("Supabase pripraveny");
+    return;
+  }
+
+  currentUser = data.user || data.session?.user || null;
   elements.authPassword.value = "";
-  showToast("Registracia vytvorena. Mozno bude treba potvrdit email.");
+
+  if (currentUser) {
+    cloudReady = true;
+    setAuthControls(true);
+    await loadCloudEntries();
+    showToast("Prihlasene.");
+  } else {
+    showToast("Ucet je vytvoreny. Ak Supabase pyta potvrdenie emailu, vypni email confirmation.");
+  }
 }
 
 async function handleSignOut() {
@@ -600,7 +622,7 @@ async function loadCloudEntries() {
 
     ensureTodayEntry();
     renderAll();
-    setCloudStatus(`Supabase: ${currentUser.email}`);
+    setCloudStatus(`Supabase: ${displayNameForUser(currentUser)}`);
   } catch (error) {
     console.error(error);
     setCloudStatus("Supabase chyba");
@@ -723,6 +745,18 @@ function loadEntries() {
   } catch {
     return {};
   }
+}
+
+function normalizeUsername(value) {
+  return value.trim().toLowerCase().replace(/[^a-z0-9_-]/g, "");
+}
+
+function authEmailForUsername(username) {
+  return `${username}@cigapp.invalid`;
+}
+
+function displayNameForUser(user) {
+  return user?.user_metadata?.username || user?.email?.split("@")[0] || "pouzivatel";
 }
 
 function todayKey() {
