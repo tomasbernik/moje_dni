@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="sk">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#f7f3ea">
+    <title>Moje dni</title>
+    <link rel="manifest" href="manifest.webmanifest">
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body>
+    <main class="app-shell">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">Sukromny dennik</p>
+          <h1>Moje dni</h1>
+        </div>
+        <div class="top-actions">
+          <button id="exportBackup" class="ghost-button" type="button">Export</button>
+          <label class="ghost-button file-button">
+            Import
+            <input id="importBackup" type="file" accept="application/json">
+          </label>
+        </div>
+      </header>
+
+      <section class="cloud-panel" aria-label="Supabase synchronizacia">
+        <div>
+          <p class="eyebrow">Synchronizacia</p>
+          <h2 id="cloudStatus">Lokalny rezim</h2>
+        </div>
+        <form id="authForm" class="auth-form">
+          <input id="authEmail" type="email" autocomplete="email" placeholder="email">
+          <input id="authPassword" type="password" autocomplete="current-password" placeholder="heslo">
+          <button id="signInButton" class="primary-button" type="submit">Prihlasit</button>
+          <button id="signUpButton" class="ghost-button" type="button">Registrovat</button>
+        </form>
+        <div class="cloud-actions">
+          <button id="syncLocalButton" class="ghost-button" type="button">Nahrat lokalne dni</button>
+          <button id="signOutButton" class="ghost-button" type="button">Odhlasit</button>
+        </div>
+      </section>
+
+      <section class="workspace">
+        <aside class="sidebar" aria-label="Prehlad dni">
+          <div class="date-card">
+            <label for="entryDate">Datum</label>
+            <input id="entryDate" type="date">
+          </div>
+
+          <label class="search-box">
+            <span>Hladat</span>
+            <input id="searchInput" type="search" placeholder="Text, nazov alebo odkaz">
+          </label>
+
+          <div class="day-list-header">
+            <h2>Dni</h2>
+            <button id="newToday" type="button" title="Dnes">Dnes</button>
+          </div>
+          <div id="entryList" class="entry-list"></div>
+        </aside>
+
+        <section class="editor" aria-label="Editor zapisku">
+          <div class="editor-meta">
+            <input id="entryTitle" class="title-input" type="text" placeholder="Nadpis dna">
+            <select id="entryMood" aria-label="Nalada">
+              <option value="">Nalada</option>
+              <option value="Radost">Radost</option>
+              <option value="Pokoj">Pokoj</option>
+              <option value="Unava">Unava</option>
+              <option value="Tazky den">Tazky den</option>
+              <option value="Vdacnost">Vdacnost</option>
+            </select>
+          </div>
+
+          <textarea id="entryContent" placeholder="Co sa dnes stalo?"></textarea>
+
+          <div class="attachments">
+            <section class="panel">
+              <div class="panel-heading">
+                <h2>Fotky</h2>
+                <label class="primary-button file-button">
+                  Pridat fotky
+                  <input id="photoInput" type="file" accept="image/*" multiple>
+                </label>
+              </div>
+              <div id="photoGrid" class="photo-grid"></div>
+            </section>
+
+            <section class="panel">
+              <div class="panel-heading">
+                <h2>Video odkazy</h2>
+              </div>
+              <form id="linkForm" class="link-form">
+                <input id="linkInput" type="url" placeholder="https://youtube.com/...">
+                <button class="primary-button" type="submit">Pridat</button>
+              </form>
+              <div id="linkList" class="link-list"></div>
+            </section>
+          </div>
+        </section>
+      </section>
+    </main>
+
+    <div id="statusToast" class="toast" role="status" aria-live="polite"></div>
+
+    <script type="module" src="app.js"></script>
+  </body>
+</html>

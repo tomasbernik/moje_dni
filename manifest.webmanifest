@@ -1,0 +1,10 @@
+{
+  "name": "Moje dni",
+  "short_name": "Moje dni",
+  "description": "Jednoduchy sukromny dennik s fotkami, odkazmi a zalohou.",
+  "start_url": ".",
+  "display": "standalone",
+  "background_color": "#f7f3ea",
+  "theme_color": "#f7f3ea",
+  "icons": []
+}
