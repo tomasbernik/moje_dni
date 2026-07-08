@@ -75,6 +75,7 @@ h2 {
 
 .top-actions,
 .editor-meta,
+.save-row,
 .panel-heading,
 .link-form,
 .day-list-header,
@@ -262,6 +263,28 @@ textarea:focus {
   margin-bottom: 12px;
 }
 
+.save-row {
+  justify-content: space-between;
+  margin: -2px 0 12px;
+}
+
+.save-status {
+  color: var(--muted);
+  font-size: 0.92rem;
+}
+
+.save-status[data-state="saving"] {
+  color: #8a6a18;
+}
+
+.save-status[data-state="saved"] {
+  color: var(--accent-strong);
+}
+
+.save-status[data-state="error"] {
+  color: var(--rose);
+}
+
 .title-input {
   min-height: 50px;
   font-size: 1.35rem;
@@ -399,7 +422,8 @@ textarea {
   }
 
   .auth-form,
-  .cloud-actions {
+  .cloud-actions,
+  .save-row {
     align-items: stretch;
     flex-direction: column;
   }

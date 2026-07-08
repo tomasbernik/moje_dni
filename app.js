@@ -25,6 +25,8 @@ const elements = {
   authPassword: document.querySelector("#authPassword"),
   signOutButton: document.querySelector("#signOutButton"),
   syncLocalButton: document.querySelector("#syncLocalButton"),
+  saveStatus: document.querySelector("#saveStatus"),
+  saveNowButton: document.querySelector("#saveNowButton"),
 };
 
 let entries = loadEntries();
@@ -34,6 +36,7 @@ let supabase = null;
 let currentUser = null;
 let cloudReady = false;
 let remoteLoading = false;
+let saveStatusTimer = null;
 
 init();
 
@@ -65,6 +68,7 @@ function bindEvents() {
   elements.authForm.addEventListener("submit", handleSignIn);
   elements.signOutButton.addEventListener("click", handleSignOut);
   elements.syncLocalButton.addEventListener("click", syncLocalEntriesToCloud);
+  elements.saveNowButton.addEventListener("click", saveCurrentEntryNow);
 }
 
 async function initCloud() {
@@ -297,15 +301,35 @@ function selectDate(date) {
 
 function queueCurrentEntrySave() {
   window.clearTimeout(saveTimer);
+  setSaveStatus("Ukladam...", "saving");
   saveTimer = window.setTimeout(() => {
-    const entry = getCurrentEntry();
-    entry.title = elements.title.value.trim();
-    entry.mood = elements.mood.value;
-    entry.content = elements.content.value;
-    entry.updatedAt = new Date().toISOString();
-    persist();
-    renderEntryList();
+    saveCurrentEntryNow();
   }, 220);
+}
+
+async function saveCurrentEntryNow() {
+  window.clearTimeout(saveTimer);
+  const entry = getCurrentEntry();
+  entry.title = elements.title.value.trim();
+  entry.mood = elements.mood.value;
+  entry.content = elements.content.value;
+  entry.updatedAt = new Date().toISOString();
+
+  setSaveStatus("Ukladam...", "saving");
+  renderEntryList();
+
+  try {
+    const result = await persist();
+    if (result === "cloud") {
+      setSaveStatus("Synchronizovane", "saved");
+    } else {
+      setSaveStatus("Ulozene lokalne", "saved");
+    }
+  } catch (error) {
+    console.error(error);
+    setSaveStatus("Chyba ukladania", "error");
+    showToast("Ukladanie zlyhalo.");
+  }
 }
 
 function getCurrentEntry() {
@@ -665,23 +689,27 @@ async function syncLocalEntriesToCloud() {
 }
 
 async function persistAll() {
+  setSaveStatus("Ukladam...", "saving");
   persistLocal();
-  if (!cloudReady) return;
+  if (!cloudReady) {
+    setSaveStatus("Ulozene lokalne", "saved");
+    return;
+  }
   for (const entry of Object.values(entries)) {
     await ensureCloudPhotos(entry);
     await saveEntryToCloud(entry);
   }
   renderPhotos();
+  setSaveStatus("Synchronizovane", "saved");
 }
 
-function persist() {
+async function persist() {
   persistLocal();
   if (cloudReady) {
-    saveEntryToCloud(getCurrentEntry()).catch((error) => {
-      console.error(error);
-      showToast("Cloud save zlyhal.");
-    });
+    await saveEntryToCloud(getCurrentEntry());
+    return "cloud";
   }
+  return "local";
 }
 
 function persistLocal() {
@@ -785,4 +813,30 @@ function showToast(message) {
   elements.toast.textContent = message;
   elements.toast.classList.add("visible");
   window.setTimeout(() => elements.toast.classList.remove("visible"), 2400);
+}
+
+function setSaveStatus(message, state = "idle") {
+  if (!elements.saveStatus) return;
+
+  window.clearTimeout(saveStatusTimer);
+  elements.saveStatus.textContent = message;
+  elements.saveStatus.dataset.state = state;
+
+  if (state === "saved") {
+    saveStatusTimer = window.setTimeout(() => {
+      const entry = getCurrentEntry();
+      const savedAt = entry.updatedAt ? formatTime(entry.updatedAt) : "";
+      elements.saveStatus.textContent = savedAt
+        ? `Ulozene ${savedAt}`
+        : "Automaticke ukladanie";
+      elements.saveStatus.dataset.state = "idle";
+    }, 1800);
+  }
+}
+
+function formatTime(isoDate) {
+  return new Intl.DateTimeFormat("sk-SK", {
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(new Date(isoDate));
 }
