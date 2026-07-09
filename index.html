@@ -54,11 +54,34 @@
             <input id="searchInput" type="search" placeholder="Text, nazov alebo odkaz">
           </label>
 
+          <div class="view-switch" aria-label="Zobrazenie dni">
+            <button id="listViewButton" class="active" type="button">Zoznam</button>
+            <button id="calendarViewButton" type="button">Kalendar</button>
+          </div>
+
           <div class="day-list-header">
             <h2>Dni</h2>
             <button id="newToday" type="button" title="Dnes">Dnes</button>
           </div>
           <div id="entryList" class="entry-list"></div>
+
+          <div id="calendarPanel" class="calendar-panel hidden">
+            <div class="calendar-header">
+              <button id="prevMonthButton" type="button" aria-label="Predchadzajuci mesiac">&lt;</button>
+              <strong id="calendarMonthLabel"></strong>
+              <button id="nextMonthButton" type="button" aria-label="Dalsi mesiac">&gt;</button>
+            </div>
+            <div class="calendar-weekdays" aria-hidden="true">
+              <span>Po</span>
+              <span>Ut</span>
+              <span>St</span>
+              <span>Stv</span>
+              <span>Pi</span>
+              <span>So</span>
+              <span>Ne</span>
+            </div>
+            <div id="calendarGrid" class="calendar-grid"></div>
+          </div>
         </aside>
 
         <section class="editor" aria-label="Editor zapisku">
@@ -80,6 +103,13 @@
           </div>
 
           <textarea id="entryContent" placeholder="Co sa dnes stalo?"></textarea>
+
+          <section class="inline-preview-panel" aria-label="Nahlad zapisku">
+            <div class="panel-heading">
+              <h2>Nahlad textu</h2>
+            </div>
+            <div id="entryPreview" class="entry-preview"></div>
+          </section>
 
           <div class="attachments">
             <section class="panel">
@@ -109,6 +139,10 @@
     </main>
 
     <div id="statusToast" class="toast" role="status" aria-live="polite"></div>
+    <div id="imageLightbox" class="image-lightbox hidden" role="dialog" aria-modal="true" aria-label="Zvacseny obrazok">
+      <button id="closeLightbox" class="lightbox-close" type="button" aria-label="Zavriet">x</button>
+      <img id="lightboxImage" alt="">
+    </div>
 
     <script type="module" src="app.js"></script>
   </body>

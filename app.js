@@ -10,10 +10,18 @@ const elements = {
   content: document.querySelector("#entryContent"),
   photoInput: document.querySelector("#photoInput"),
   photoGrid: document.querySelector("#photoGrid"),
+  preview: document.querySelector("#entryPreview"),
   linkForm: document.querySelector("#linkForm"),
   linkInput: document.querySelector("#linkInput"),
   linkList: document.querySelector("#linkList"),
   entryList: document.querySelector("#entryList"),
+  calendarPanel: document.querySelector("#calendarPanel"),
+  calendarGrid: document.querySelector("#calendarGrid"),
+  calendarMonthLabel: document.querySelector("#calendarMonthLabel"),
+  listViewButton: document.querySelector("#listViewButton"),
+  calendarViewButton: document.querySelector("#calendarViewButton"),
+  prevMonthButton: document.querySelector("#prevMonthButton"),
+  nextMonthButton: document.querySelector("#nextMonthButton"),
   search: document.querySelector("#searchInput"),
   newToday: document.querySelector("#newToday"),
   exportBackup: document.querySelector("#exportBackup"),
@@ -27,10 +35,15 @@ const elements = {
   syncLocalButton: document.querySelector("#syncLocalButton"),
   saveStatus: document.querySelector("#saveStatus"),
   saveNowButton: document.querySelector("#saveNowButton"),
+  imageLightbox: document.querySelector("#imageLightbox"),
+  lightboxImage: document.querySelector("#lightboxImage"),
+  closeLightbox: document.querySelector("#closeLightbox"),
 };
 
 let entries = loadEntries();
 let selectedDate = todayKey();
+let currentView = "list";
+let visibleMonth = selectedDate.slice(0, 7);
 let saveTimer = null;
 let supabase = null;
 let currentUser = null;
@@ -55,7 +68,18 @@ async function init() {
 function bindEvents() {
   elements.date.addEventListener("change", () => selectDate(elements.date.value));
   elements.newToday.addEventListener("click", () => selectDate(todayKey()));
-  elements.search.addEventListener("input", renderEntryList);
+  elements.search.addEventListener("input", renderNavigation);
+  elements.listViewButton.addEventListener("click", () => setNavigationView("list"));
+  elements.calendarViewButton.addEventListener("click", () => setNavigationView("calendar"));
+  elements.prevMonthButton.addEventListener("click", () => shiftVisibleMonth(-1));
+  elements.nextMonthButton.addEventListener("click", () => shiftVisibleMonth(1));
+  elements.closeLightbox.addEventListener("click", closeLightbox);
+  elements.imageLightbox.addEventListener("click", (event) => {
+    if (event.target === elements.imageLightbox) closeLightbox();
+  });
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") closeLightbox();
+  });
 
   [elements.title, elements.mood, elements.content].forEach((element) => {
     element.addEventListener("input", queueCurrentEntrySave);
@@ -291,6 +315,7 @@ function ensureTodayEntry() {
 function selectDate(date) {
   if (!date) return;
   selectedDate = date;
+  visibleMonth = selectedDate.slice(0, 7);
   if (!entries[selectedDate]) {
     entries[selectedDate] = createEntry(selectedDate);
     persist();
@@ -301,7 +326,10 @@ function selectDate(date) {
 
 function queueCurrentEntrySave() {
   window.clearTimeout(saveTimer);
+  syncCurrentEntryFromEditor(false);
   setSaveStatus("Ukladam...", "saving");
+  renderInlinePreview();
+  renderNavigation();
   saveTimer = window.setTimeout(() => {
     saveCurrentEntryNow();
   }, 220);
@@ -309,14 +337,11 @@ function queueCurrentEntrySave() {
 
 async function saveCurrentEntryNow() {
   window.clearTimeout(saveTimer);
-  const entry = getCurrentEntry();
-  entry.title = elements.title.value.trim();
-  entry.mood = elements.mood.value;
-  entry.content = elements.content.value;
-  entry.updatedAt = new Date().toISOString();
+  syncCurrentEntryFromEditor(true);
 
   setSaveStatus("Ukladam...", "saving");
-  renderEntryList();
+  renderNavigation();
+  renderInlinePreview();
 
   try {
     const result = await persist();
@@ -336,14 +361,30 @@ function getCurrentEntry() {
   if (!entries[selectedDate]) {
     entries[selectedDate] = createEntry(selectedDate);
   }
+  entries[selectedDate].photos = entries[selectedDate].photos || [];
+  entries[selectedDate].links = entries[selectedDate].links || [];
   return entries[selectedDate];
+}
+
+function syncCurrentEntryFromEditor(touchUpdatedAt) {
+  const entry = getCurrentEntry();
+  entry.title = elements.title.value.trim();
+  entry.mood = elements.mood.value;
+  entry.content = elements.content.value;
+  entry.photos = entry.photos || [];
+  entry.links = entry.links || [];
+  if (touchUpdatedAt) {
+    entry.updatedAt = new Date().toISOString();
+  }
+  return entry;
 }
 
 function renderAll() {
   renderEditor();
   renderPhotos();
   renderLinks();
-  renderEntryList();
+  renderInlinePreview();
+  renderNavigation();
 }
 
 function renderEditor() {
@@ -355,6 +396,7 @@ function renderEditor() {
 
 function renderPhotos() {
   const entry = getCurrentEntry();
+  entry.photos = entry.photos || [];
   elements.photoGrid.innerHTML = "";
 
   if (!entry.photos.length) {
@@ -369,6 +411,14 @@ function renderPhotos() {
     const image = document.createElement("img");
     image.src = photo.signedUrl || photo.dataUrl || "";
     image.alt = photo.name || "Fotka zo zapisku";
+    image.addEventListener("click", () => openLightbox(photo));
+
+    const insert = document.createElement("button");
+    insert.className = "insert-photo-button";
+    insert.type = "button";
+    insert.textContent = "Do textu";
+    insert.title = "Vlozit fotku do textu";
+    insert.addEventListener("click", () => insertPhotoIntoText(photo));
 
     const remove = document.createElement("button");
     remove.className = "remove-button";
@@ -377,7 +427,7 @@ function renderPhotos() {
     remove.title = "Odstranit fotku";
     remove.addEventListener("click", () => removePhoto(photo.id));
 
-    tile.append(image, remove);
+    tile.append(image, insert, remove);
     elements.photoGrid.append(tile);
   });
 }
@@ -394,11 +444,13 @@ async function removePhoto(photoId) {
 
   persist();
   renderPhotos();
-  renderEntryList();
+  renderNavigation();
+  renderInlinePreview();
 }
 
 function renderLinks() {
   const entry = getCurrentEntry();
+  entry.links = entry.links || [];
   elements.linkList.innerHTML = "";
 
   if (!entry.links.length) {
@@ -426,12 +478,26 @@ function renderLinks() {
       current.updatedAt = new Date().toISOString();
       persist();
       renderLinks();
-      renderEntryList();
+      renderNavigation();
     });
 
     item.append(anchor, remove);
     elements.linkList.append(item);
   });
+}
+
+function renderNavigation() {
+  renderEntryList();
+  renderCalendar();
+}
+
+function setNavigationView(view) {
+  currentView = view;
+  elements.entryList.classList.toggle("hidden", currentView !== "list");
+  elements.calendarPanel.classList.toggle("hidden", currentView !== "calendar");
+  elements.listViewButton.classList.toggle("active", currentView === "list");
+  elements.calendarViewButton.classList.toggle("active", currentView === "calendar");
+  renderNavigation();
 }
 
 function renderEntryList() {
@@ -463,16 +529,70 @@ function renderEntryList() {
 
     const snippet = document.createElement("div");
     snippet.className = "entry-snippet";
-    snippet.textContent = entry.content || entry.mood || attachmentSummary(entry);
+    snippet.textContent = previewSnippet(entry);
 
     button.append(date, name, snippet);
     elements.entryList.append(button);
   });
 }
 
+function renderCalendar() {
+  const [year, month] = visibleMonth.split("-").map(Number);
+  const firstDay = new Date(year, month - 1, 1);
+  const lastDay = new Date(year, month, 0);
+  const startOffset = (firstDay.getDay() + 6) % 7;
+  const query = elements.search.value.trim().toLowerCase();
+  const matchingDates = new Set(
+    Object.values(entries)
+      .filter((entry) => matchesQuery(entry, query))
+      .map((entry) => entry.date)
+  );
+
+  elements.calendarMonthLabel.textContent = new Intl.DateTimeFormat("sk-SK", {
+    month: "long",
+    year: "numeric",
+  }).format(firstDay);
+  elements.calendarGrid.innerHTML = "";
+
+  for (let i = 0; i < startOffset; i += 1) {
+    const spacer = document.createElement("span");
+    spacer.className = "calendar-spacer";
+    elements.calendarGrid.append(spacer);
+  }
+
+  for (let day = 1; day <= lastDay.getDate(); day += 1) {
+    const date = `${visibleMonth}-${String(day).padStart(2, "0")}`;
+    const entry = entries[date];
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "calendar-day";
+    button.disabled = query && !matchingDates.has(date);
+    button.addEventListener("click", () => selectDate(date));
+
+    if (date === selectedDate) button.classList.add("active");
+    if (entry && hasEntryText(entry)) button.classList.add("has-entry");
+
+    const dayNumber = document.createElement("span");
+    dayNumber.textContent = String(day);
+
+    const dayTitle = document.createElement("small");
+    dayTitle.textContent = entry?.title || entry?.mood || "";
+
+    button.append(dayNumber, dayTitle);
+    elements.calendarGrid.append(button);
+  }
+}
+
+function shiftVisibleMonth(direction) {
+  const [year, month] = visibleMonth.split("-").map(Number);
+  const next = new Date(year, month - 1 + direction, 1);
+  visibleMonth = formatMonthKey(next);
+  renderCalendar();
+}
+
 function matchesQuery(entry, query) {
   if (!query) return true;
-  const links = entry.links.map((link) => link.url).join(" ");
+  const links = (entry.links || []).map((link) => link.url).join(" ");
   return [entry.date, entry.title, entry.mood, entry.content, links]
     .join(" ")
     .toLowerCase()
@@ -492,7 +612,8 @@ async function handlePhotoUpload(event) {
     entry.updatedAt = new Date().toISOString();
     persist();
     renderPhotos();
-    renderEntryList();
+    renderNavigation();
+    renderInlinePreview();
     showToast(cloudReady ? "Fotky su ulozene v Supabase." : "Fotky su ulozene v tomto prehliadaci.");
   } catch (error) {
     console.error(error);
@@ -569,7 +690,7 @@ function handleLinkSubmit(event) {
     elements.linkInput.value = "";
     persist();
     renderLinks();
-    renderEntryList();
+    renderNavigation();
   } catch {
     showToast("Toto nevyzera ako platny odkaz.");
   }
@@ -605,7 +726,7 @@ function importBackup(event) {
       if (!importedEntries || typeof importedEntries !== "object") {
         throw new Error("Invalid backup");
       }
-      entries = { ...entries, ...importedEntries };
+      entries = normalizeEntries({ ...entries, ...importedEntries });
       await persistAll();
       renderAll();
       showToast("Zaloha bola importovana.");
@@ -720,7 +841,7 @@ async function saveEntryToCloud(entry) {
   if (!cloudReady || !currentUser) return;
   await ensureCloudPhotos(entry);
 
-  const photos = entry.photos.map(({ signedUrl, dataUrl, ...photo }) => photo);
+  const photos = (entry.photos || []).map(({ signedUrl, dataUrl, ...photo }) => photo);
   const { error } = await supabase.from("diary_entries").upsert(
     {
       user_id: currentUser.id,
@@ -739,6 +860,7 @@ async function saveEntryToCloud(entry) {
 
 async function ensureCloudPhotos(entry) {
   if (!cloudReady || !currentUser) return;
+  entry.photos = entry.photos || [];
 
   for (const photo of entry.photos) {
     if (photo.path || !photo.dataUrl) continue;
@@ -769,10 +891,25 @@ async function ensureCloudPhotos(entry) {
 
 function loadEntries() {
   try {
-    return JSON.parse(localStorage.getItem(STORAGE_KEY)) || {};
+    return normalizeEntries(JSON.parse(localStorage.getItem(STORAGE_KEY)) || {});
   } catch {
     return {};
   }
+}
+
+function normalizeEntries(rawEntries) {
+  return Object.fromEntries(
+    Object.entries(rawEntries || {}).map(([date, entry]) => [
+      date,
+      {
+        ...createEntry(date),
+        ...entry,
+        date: entry?.date || date,
+        photos: entry?.photos || [],
+        links: entry?.links || [],
+      },
+    ])
+  );
 }
 
 function normalizeUsername(value) {
@@ -793,6 +930,10 @@ function todayKey() {
   return new Date(now.getTime() - offset * 60000).toISOString().slice(0, 10);
 }
 
+function formatMonthKey(date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+}
+
 function formatDate(date) {
   return new Intl.DateTimeFormat("sk-SK", {
     weekday: "short",
@@ -804,9 +945,120 @@ function formatDate(date) {
 
 function attachmentSummary(entry) {
   const parts = [];
-  if (entry.photos.length) parts.push(`${entry.photos.length} fotiek`);
-  if (entry.links.length) parts.push(`${entry.links.length} odkazov`);
+  if ((entry.photos || []).length) parts.push(`${entry.photos.length} fotiek`);
+  if ((entry.links || []).length) parts.push(`${entry.links.length} odkazov`);
   return parts.join(", ") || "Prazdny zapisok";
+}
+
+function previewSnippet(entry) {
+  const text = withoutPhotoMarkers(entry.content || "")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (text) return firstSentences(text);
+  return entry.mood || attachmentSummary(entry);
+}
+
+function firstSentences(text) {
+  const matches = text.match(/[^.!?]+[.!?]+|[^.!?]+$/g) || [];
+  const snippet = matches.slice(0, 2).join(" ").trim();
+  return snippet.length > 180 ? `${snippet.slice(0, 177).trim()}...` : snippet;
+}
+
+function hasEntryText(entry) {
+  return Boolean(
+    entry?.title ||
+      entry?.mood ||
+      withoutPhotoMarkers(entry?.content || "").trim() ||
+      entry?.photos?.length ||
+      entry?.links?.length
+  );
+}
+
+function withoutPhotoMarkers(text) {
+  return text.replace(/!\[[^\]]*\]\(photo:[^)]+\)/g, " ");
+}
+
+function insertPhotoIntoText(photo) {
+  const label = (photo.name || "fotka").replace(/[\[\]\n\r]/g, " ").trim() || "fotka";
+  const marker = `![${label}](photo:${photo.id})`;
+  const textarea = elements.content;
+  const start = textarea.selectionStart ?? textarea.value.length;
+  const end = textarea.selectionEnd ?? textarea.value.length;
+  const before = textarea.value.slice(0, start);
+  const after = textarea.value.slice(end);
+  const prefix = before && !before.endsWith("\n") ? "\n\n" : "";
+  const suffix = after && !after.startsWith("\n") ? "\n\n" : "";
+  const inserted = `${prefix}${marker}${suffix}`;
+
+  textarea.value = `${before}${inserted}${after}`;
+  textarea.focus();
+  textarea.selectionStart = textarea.selectionEnd = start + inserted.length;
+  queueCurrentEntrySave();
+  showToast("Fotka je vlozena do textu.");
+}
+
+function renderInlinePreview() {
+  const entry = getCurrentEntry();
+  const content = elements.content.value;
+  elements.preview.innerHTML = "";
+
+  if (!content.trim()) {
+    elements.preview.innerHTML = '<p class="empty-note">Nahlad sa zobrazi pocas pisania.</p>';
+    return;
+  }
+
+  const photoMap = new Map((entry.photos || []).map((photo) => [photo.id, photo]));
+  const pattern = /!\[([^\]]*)\]\(photo:([^)]+)\)/g;
+  let index = 0;
+  let match;
+
+  while ((match = pattern.exec(content))) {
+    appendPreviewText(elements.preview, content.slice(index, match.index));
+    const photo = photoMap.get(match[2]);
+    if (photo) {
+      elements.preview.append(createInlinePhoto(photo, match[1]));
+    } else {
+      appendPreviewText(elements.preview, match[0]);
+    }
+    index = pattern.lastIndex;
+  }
+
+  appendPreviewText(elements.preview, content.slice(index));
+}
+
+function appendPreviewText(container, text) {
+  if (!text) return;
+  const lines = text.split("\n");
+  lines.forEach((line, lineIndex) => {
+    if (lineIndex > 0) container.append(document.createElement("br"));
+    if (line) container.append(document.createTextNode(line));
+  });
+}
+
+function createInlinePhoto(photo, fallbackAlt) {
+  const figure = document.createElement("figure");
+  figure.className = "inline-photo";
+
+  const image = document.createElement("img");
+  image.src = photo.signedUrl || photo.dataUrl || "";
+  image.alt = fallbackAlt || photo.name || "Fotka v texte";
+  image.addEventListener("click", () => openLightbox(photo));
+
+  figure.append(image);
+  return figure;
+}
+
+function openLightbox(photo) {
+  const src = photo?.signedUrl || photo?.dataUrl || "";
+  if (!src) return;
+  elements.lightboxImage.src = src;
+  elements.lightboxImage.alt = photo.name || "Zvacseny obrazok";
+  elements.imageLightbox.classList.remove("hidden");
+}
+
+function closeLightbox() {
+  elements.imageLightbox.classList.add("hidden");
+  elements.lightboxImage.removeAttribute("src");
 }
 
 function showToast(message) {
