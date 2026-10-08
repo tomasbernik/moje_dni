@@ -1,11 +1,11 @@
-const CACHE_NAME = "moje-dni-v10-neon-otp";
+const CACHE_NAME = "moje-dni-v11-neon-modules";
 const ASSETS = [
   "./",
   "./index.html",
   "./styles.css",
-  "./app.js?v=10",
-  "./neon-client.js?v=10",
-  "./supabase-config.js?v=10",
+  "./app-neon.js",
+  "./neon-client.js",
+  "./neon-config.js",
   "./icon.svg",
   "./icon-192.png",
   "./icon-512.png",
@@ -13,13 +13,17 @@ const ASSETS = [
 ];
 
 self.addEventListener("install", (event) => {
-  event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.addAll(ASSETS)));
+  event.waitUntil(
+    caches.open(CACHE_NAME)
+      .then((cache) => cache.addAll(ASSETS))
+      .then(() => self.skipWaiting())
+  );
 });
 
 self.addEventListener("fetch", (event) => {
   if (event.request.method !== "GET") return;
 
-  if (event.request.url.includes("/supabase-config.js")) {
+  if (event.request.url.includes("/neon-config.js")) {
     event.respondWith(fetch(event.request));
     return;
   }
@@ -39,6 +43,6 @@ self.addEventListener("activate", (event) => {
           .filter((key) => key !== CACHE_NAME)
           .map((key) => caches.delete(key))
       );
-    })
+    }).then(() => self.clients.claim())
   );
 });

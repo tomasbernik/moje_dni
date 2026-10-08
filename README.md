@@ -11,4 +11,4 @@ Projekt pouziva samostatny Neon projekt `falling-frog-37246536`:
 - privatny bucket `moje-dni-photos`
 - autentifikovanu Neon Function `mojedniphotos` pre pristup k fotografiam
 
-Frontend je staticky a je urceny na nasadenie cez GitHub Pages. Koncove body v `supabase-config.js` su verejne; data chrani Neon Auth, RLS a kontrola JWT vo funkcii pre fotografie.
+Frontend je staticky a je urceny na nasadenie cez GitHub Pages. Koncove body v `neon-config.js` su verejne; data chrani Neon Auth, RLS a kontrola JWT vo funkcii pre fotografie.
