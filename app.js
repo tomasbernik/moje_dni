@@ -1,5 +1,5 @@
-import { NEON_CONFIG } from "./supabase-config.js";
-import { createMojeDniClient } from "./neon-client.js";
+import { NEON_CONFIG } from "./supabase-config.js?v=10";
+import { createMojeDniClient } from "./neon-client.js?v=10";
 
 const STORAGE_KEY = "moje-dni.entries.v1";
 

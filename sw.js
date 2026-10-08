@@ -1,10 +1,11 @@
-const CACHE_NAME = "moje-dni-v9-neon-otp";
+const CACHE_NAME = "moje-dni-v10-neon-otp";
 const ASSETS = [
   "./",
   "./index.html",
   "./styles.css",
-  "./app.js?v=9",
-  "./neon-client.js",
+  "./app.js?v=10",
+  "./neon-client.js?v=10",
+  "./supabase-config.js?v=10",
   "./icon.svg",
   "./icon-192.png",
   "./icon-512.png",
@@ -18,7 +19,7 @@ self.addEventListener("install", (event) => {
 self.addEventListener("fetch", (event) => {
   if (event.request.method !== "GET") return;
 
-  if (event.request.url.endsWith("/supabase-config.js")) {
+  if (event.request.url.includes("/supabase-config.js")) {
     event.respondWith(fetch(event.request));
     return;
   }
