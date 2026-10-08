@@ -1,9 +1,10 @@
-const CACHE_NAME = "moje-dni-v7";
+const CACHE_NAME = "moje-dni-v9-neon-otp";
 const ASSETS = [
   "./",
   "./index.html",
   "./styles.css",
   "./app.js",
+  "./neon-client.js",
   "./icon.svg",
   "./icon-192.png",
   "./icon-512.png",

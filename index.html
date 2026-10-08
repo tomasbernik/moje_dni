@@ -26,15 +26,15 @@
         </div>
       </header>
 
-      <section class="cloud-panel" aria-label="Supabase synchronizacia">
+      <section class="cloud-panel" aria-label="Neon synchronizacia">
         <div>
           <p class="eyebrow">Synchronizacia</p>
           <h2 id="cloudStatus">Lokalny rezim</h2>
         </div>
         <form id="authForm" class="auth-form">
-          <input id="authUsername" type="text" autocomplete="username" placeholder="meno" minlength="3" maxlength="32">
-          <input id="authPassword" type="password" autocomplete="current-password" placeholder="heslo">
-          <button id="signInButton" class="primary-button" type="submit">Prihlasit</button>
+          <input id="authUsername" type="text" autocomplete="username" placeholder="meno" value="tomas.bernik" minlength="3" maxlength="32">
+          <input id="authCode" type="text" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]*" placeholder="kod z e-mailu" hidden>
+          <button id="signInButton" class="primary-button" type="submit">Poslat kod</button>
         </form>
         <div class="cloud-actions">
           <button id="syncLocalButton" class="ghost-button" type="button">Nahrat lokalne dni</button>

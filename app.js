@@ -1,7 +1,7 @@
-import { SUPABASE_CONFIG } from "./supabase-config.js";
+import { NEON_CONFIG } from "./supabase-config.js";
+import { createMojeDniClient } from "./neon-client.js";
 
 const STORAGE_KEY = "moje-dni.entries.v1";
-const SUPABASE_CDN_URL = "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2";
 
 const elements = {
   date: document.querySelector("#entryDate"),
@@ -30,7 +30,8 @@ const elements = {
   cloudStatus: document.querySelector("#cloudStatus"),
   authForm: document.querySelector("#authForm"),
   authUsername: document.querySelector("#authUsername"),
-  authPassword: document.querySelector("#authPassword"),
+  authCode: document.querySelector("#authCode"),
+  signInButton: document.querySelector("#signInButton"),
   signOutButton: document.querySelector("#signOutButton"),
   syncLocalButton: document.querySelector("#syncLocalButton"),
   saveStatus: document.querySelector("#saveStatus"),
@@ -45,7 +46,7 @@ let selectedDate = todayKey();
 let currentView = "list";
 let visibleMonth = selectedDate.slice(0, 7);
 let saveTimer = null;
-let supabase = null;
+let neon = null;
 let currentUser = null;
 let cloudReady = false;
 let remoteLoading = false;
@@ -99,30 +100,18 @@ async function initCloud() {
   setCloudStatus("Lokalny rezim");
   setAuthControls(false);
 
-  if (!hasSupabaseConfig()) {
-    setCloudStatus("Dopln Supabase config");
+  if (!hasNeonConfig()) {
+    setCloudStatus("Dopln Neon config");
     return;
   }
 
   try {
-    setCloudStatus("Supabase config pripraveny");
-    await loadSupabaseLibrary();
-    if (!window.supabase?.createClient) {
-      setCloudStatus("Supabase JS sa nenacital");
-      return;
-    }
-
-    supabase = window.supabase.createClient(SUPABASE_CONFIG.url, SUPABASE_CONFIG.anonKey, {
-      auth: {
-        autoRefreshToken: true,
-        persistSession: true,
-        detectSessionInUrl: true,
-      },
-    });
-    setCloudStatus("Supabase pripraveny");
+    neon = createMojeDniClient(NEON_CONFIG);
+    if (!neon) return;
+    setCloudStatus("Neon pripraveny");
 
     const { data, error } = await withTimeout(
-      supabase.auth.getSession(),
+      neon.auth.getSession(),
       4000,
       { data: { session: null }, error: null }
     );
@@ -131,7 +120,7 @@ async function initCloud() {
     cloudReady = Boolean(currentUser);
     setAuthControls(cloudReady);
 
-    supabase.auth.onAuthStateChange(async (_event, session) => {
+    neon.auth.onAuthStateChange(async (_event, session) => {
       currentUser = session?.user || null;
       cloudReady = Boolean(currentUser);
       setAuthControls(cloudReady);
@@ -148,12 +137,12 @@ async function initCloud() {
     if (cloudReady) {
       await loadCloudEntries();
     } else {
-      setCloudStatus("Supabase pripraveny");
+      setCloudStatus("Neon pripraveny");
     }
   } catch (error) {
     console.error(error);
-    setCloudStatus("Supabase sa nenacital");
-    showToast("Supabase sa nepodarilo nacitat.");
+    setCloudStatus("Neon sa nenacital");
+    showToast("Neon sa nepodarilo nacitat.");
   }
 }
 
@@ -166,40 +155,33 @@ function withTimeout(promise, timeoutMs, fallbackValue) {
   ]);
 }
 
-function loadSupabaseLibrary() {
-  if (window.supabase?.createClient) {
-    return Promise.resolve();
+async function storageRequest(action, path, body, contentType) {
+  if (!neon || !NEON_CONFIG.photoFunctionUrl) {
+    throw new Error("Neon photo storage nie je nastavene.");
   }
-
-  return new Promise((resolve) => {
-    const existing = document.querySelector(`script[src="${SUPABASE_CDN_URL}"]`);
-    const script = existing || document.createElement("script");
-    let finished = false;
-
-    const done = () => {
-      if (finished) return;
-      finished = true;
-      resolve();
-    };
-
-    script.addEventListener("load", done, { once: true });
-    script.addEventListener("error", done, { once: true });
-
-    if (!existing) {
-      script.src = SUPABASE_CDN_URL;
-      script.async = true;
-      document.head.append(script);
-    }
-
-    window.setTimeout(done, 4000);
+  const { data, error } = await neon.auth.getSession();
+  const token = data?.session?.access_token;
+  if (error || !token) throw new Error("Pre pracu s fotkami sa prihlas.");
+  const url = new URL(NEON_CONFIG.photoFunctionUrl);
+  url.searchParams.set("action", action);
+  url.searchParams.set("path", path);
+  const response = await fetch(url, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      ...(contentType ? { "Content-Type": contentType } : {}),
+    },
+    body,
   });
+  const result = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(result.error || "Operacia s fotkou zlyhala.");
+  return result;
 }
 
-function hasSupabaseConfig() {
+function hasNeonConfig() {
   return Boolean(
-    SUPABASE_CONFIG.url &&
-      SUPABASE_CONFIG.anonKey &&
-      SUPABASE_CONFIG.url.includes(".supabase.")
+    NEON_CONFIG.authUrl &&
+      NEON_CONFIG.dataApiUrl
   );
 }
 
@@ -207,6 +189,11 @@ function setAuthControls(isSignedIn) {
   elements.authForm.classList.toggle("hidden", isSignedIn);
   elements.signOutButton.disabled = !isSignedIn;
   elements.syncLocalButton.disabled = !isSignedIn;
+  if (!isSignedIn) {
+    elements.authCode.hidden = true;
+    elements.authCode.value = "";
+    elements.signInButton.textContent = "Poslat kod";
+  }
 }
 
 function setCloudStatus(message) {
@@ -215,26 +202,20 @@ function setCloudStatus(message) {
 
 async function handleSignIn(event) {
   event.preventDefault();
-  if (!supabase) {
-    showToast("Supabase sa este nenacital.");
+  if (!neon) {
+    showToast("Neon sa este nenacital.");
     return;
   }
 
   const rawUsername = elements.authUsername.value;
   const username = normalizeUsername(rawUsername);
-  const password = elements.authPassword.value;
-  if (!username || !password) {
-    showToast("Zadaj meno aj heslo.");
+  if (!username) {
+    showToast("Zadaj meno.");
     return;
   }
 
   if (username.length < 3) {
     showToast("Meno musi mat aspon 3 znaky.");
-    return;
-  }
-
-  if (password.length < 6) {
-    showToast("Heslo musi mat aspon 6 znakov.");
     return;
   }
 
@@ -245,33 +226,46 @@ async function handleSignIn(event) {
   }
 
   const email = authEmailForUsername(username);
-  setCloudStatus("Prihlasujem");
-  let { data, error } = await supabase.auth.signInWithPassword({ email, password });
-
-  if (error) {
-    const signup = await supabase.auth.signUp({
-      email,
-      password,
-      options: { data: { username } },
-    });
-    data = signup.data;
-    error = signup.error;
-
-    if (error && /already|registered|exists/i.test(error.message)) {
-      showToast("Toto meno uz existuje. Skus spravne heslo.");
-      setCloudStatus("Supabase pripraveny");
-      return;
-    }
+  if (!email) {
+    showToast("Neznamy pouzivatel.");
+    return;
   }
 
+  const token = elements.authCode.value.trim();
+  if (elements.authCode.hidden) {
+    setCloudStatus("Posielam kod");
+    const { error } = await neon.auth.signInWithOtp({
+      email,
+      options: { shouldCreateUser: false },
+    });
+    if (error) {
+      showToast(error.message);
+      setCloudStatus("Neon pripraveny");
+      return;
+    }
+    elements.authCode.hidden = false;
+    elements.signInButton.textContent = "Overit kod";
+    elements.authCode.focus();
+    setCloudStatus("Kod bol poslany");
+    showToast("Kod bol poslany na tvoj e-mail.");
+    return;
+  }
+
+  if (!/^\d{6,10}$/.test(token)) {
+    showToast("Zadaj kod z e-mailu.");
+    return;
+  }
+
+  setCloudStatus("Overujem kod");
+  const { data, error } = await neon.auth.verifyOtp({ email, token, type: "email" });
   if (error) {
     showToast(error.message);
-    setCloudStatus("Supabase pripraveny");
+    setCloudStatus("Neon pripraveny");
     return;
   }
 
   currentUser = data.user || data.session?.user || null;
-  elements.authPassword.value = "";
+  elements.authCode.value = "";
 
   if (currentUser) {
     cloudReady = true;
@@ -279,13 +273,13 @@ async function handleSignIn(event) {
     await loadCloudEntries();
     showToast("Prihlasene.");
   } else {
-    showToast("Ucet je vytvoreny. Ak Supabase pyta potvrdenie emailu, vypni email confirmation.");
+    showToast("Kod bol overeny, obnovujem prihlasenie.");
   }
 }
 
 async function handleSignOut() {
-  if (!supabase) return;
-  const { error } = await supabase.auth.signOut();
+  if (!neon) return;
+  const { error } = await neon.auth.signOut();
   if (error) {
     showToast(error.message);
     return;
@@ -439,7 +433,7 @@ async function removePhoto(photoId) {
   entry.updatedAt = new Date().toISOString();
 
   if (cloudReady && photo?.path) {
-    await supabase.storage.from(SUPABASE_CONFIG.photoBucket).remove([photo.path]);
+    await storageRequest("delete", photo.path);
   }
 
   persist();
@@ -614,7 +608,7 @@ async function handlePhotoUpload(event) {
     renderPhotos();
     renderNavigation();
     renderInlinePreview();
-    showToast(cloudReady ? "Fotky su ulozene v Supabase." : "Fotky su ulozene v tomto prehliadaci.");
+    showToast(cloudReady ? "Fotky su ulozene v Neone." : "Fotky su ulozene v tomto prehliadaci.");
   } catch (error) {
     console.error(error);
     showToast("Fotky sa nepodarilo ulozit.");
@@ -631,17 +625,8 @@ async function uploadPhotosToCloud(files) {
     const id = crypto.randomUUID();
     const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "-");
     const path = `${userId}/${selectedDate}/${id}-${safeName}`;
-    const { error } = await supabase.storage
-      .from(SUPABASE_CONFIG.photoBucket)
-      .upload(path, file, {
-        contentType: file.type,
-        upsert: false,
-      });
-    if (error) throw error;
-
-    const { data } = await supabase.storage
-      .from(SUPABASE_CONFIG.photoBucket)
-      .createSignedUrl(path, 60 * 60);
+    await storageRequest("upload", path, file, file.type);
+    const data = await storageRequest("url", path);
 
     uploaded.push({
       id,
@@ -700,7 +685,7 @@ function exportBackup() {
   const payload = {
     app: "Moje dni",
     version: 2,
-    mode: cloudReady ? "supabase" : "local",
+    mode: cloudReady ? "neon" : "local",
     exportedAt: new Date().toISOString(),
     entries,
   };
@@ -743,10 +728,10 @@ function importBackup(event) {
 async function loadCloudEntries() {
   if (!cloudReady || remoteLoading) return;
   remoteLoading = true;
-  setCloudStatus("Nacitavam Supabase");
+  setCloudStatus("Nacitavam Neon");
 
   try {
-    const { data, error } = await supabase
+    const { data, error } = await neon
       .from("diary_entries")
       .select("entry_date,title,mood,content,photos,links,updated_at")
       .order("entry_date", { ascending: false });
@@ -767,10 +752,10 @@ async function loadCloudEntries() {
 
     ensureTodayEntry();
     renderAll();
-    setCloudStatus(`Supabase: ${displayNameForUser(currentUser)}`);
+    setCloudStatus(`Neon: ${displayNameForUser(currentUser)}`);
   } catch (error) {
     console.error(error);
-    setCloudStatus("Supabase chyba");
+    setCloudStatus("Neon chyba");
     showToast("Cloudove dni sa nepodarilo nacitat.");
   } finally {
     remoteLoading = false;
@@ -783,13 +768,12 @@ async function withSignedPhotoUrls(photos) {
   return Promise.all(
     photos.map(async (photo) => {
       if (!photo.path) return photo;
-      const { data, error } = await supabase.storage
-        .from(SUPABASE_CONFIG.photoBucket)
-        .createSignedUrl(photo.path, 60 * 60);
-      return {
-        ...photo,
-        signedUrl: error ? "" : data?.signedUrl || "",
-      };
+      try {
+        const data = await storageRequest("url", photo.path);
+        return { ...photo, signedUrl: data?.signedUrl || "" };
+      } catch {
+        return { ...photo, signedUrl: "" };
+      }
     })
   );
 }
@@ -806,7 +790,7 @@ async function syncLocalEntriesToCloud() {
   entries = { ...entries, ...localEntries };
   await persistAll();
   renderAll();
-  showToast("Lokalne dni boli nahrate do Supabase.");
+  showToast("Lokalne dni boli nahrate do Neonu.");
 }
 
 async function persistAll() {
@@ -842,7 +826,7 @@ async function saveEntryToCloud(entry) {
   await ensureCloudPhotos(entry);
 
   const photos = (entry.photos || []).map(({ signedUrl, dataUrl, ...photo }) => photo);
-  const { error } = await supabase.from("diary_entries").upsert(
+  const { error } = await neon.from("diary_entries").upsert(
     {
       user_id: currentUser.id,
       entry_date: entry.date,
@@ -870,17 +854,8 @@ async function ensureCloudPhotos(entry) {
     const id = photo.id || crypto.randomUUID();
     const safeName = (photo.name || `${id}.jpg`).replace(/[^a-zA-Z0-9._-]/g, "-");
     const path = `${currentUser.id}/${entry.date}/${id}-${safeName}`;
-    const { error } = await supabase.storage
-      .from(SUPABASE_CONFIG.photoBucket)
-      .upload(path, blob, {
-        contentType: photo.type || blob.type || "image/jpeg",
-        upsert: false,
-      });
-    if (error) throw error;
-
-    const { data } = await supabase.storage
-      .from(SUPABASE_CONFIG.photoBucket)
-      .createSignedUrl(path, 60 * 60);
+    await storageRequest("upload", path, blob, photo.type || blob.type || "image/jpeg");
+    const data = await storageRequest("url", path);
 
     photo.id = id;
     photo.path = path;
@@ -917,7 +892,7 @@ function normalizeUsername(value) {
 }
 
 function authEmailForUsername(username) {
-  return `${username}@cigapp.invalid`;
+  return username === "tomas.bernik" ? "tomas.bernik@gmail.com" : "";
 }
 
 function displayNameForUser(user) {

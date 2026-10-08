@@ -1,21 +1,14 @@
 # Moje dni
 
-Jednoducha staticka dennikova appka pre GitHub Pages so synchronizaciou cez existujuci Supabase projekt CigApp.
+Jednoducha staticka dennikova appka pre GitHub Pages so synchronizaciou cez Neon.
 
-## Supabase setup
+## Neon setup
 
-1. Otvor existujuci Supabase projekt CigApp.
-2. V SQL editore spusti `supabase-schema.sql`.
-3. `supabase-config.js` uz pouziva CigApp Project URL a publishable key.
-4. V Authentication > URL Configuration pridaj GitHub Pages adresu appky medzi povolene redirect URL.
-5. Zapni GitHub Pages pre tento repozitar.
+Projekt pouziva samostatny Neon projekt `falling-frog-37246536`:
 
-SQL schema vytvori iba objekty pre Moje dni:
+- Neon Auth s e-mailovym OTP pre ucet `tomas.bernik@gmail.com`
+- Neon Data API a RLS nad tabulkou `public.diary_entries`
+- privatny bucket `moje-dni-photos`
+- autentifikovanu Neon Function `mojedniphotos` pre pristup k fotografiam
 
-- tabulku `public.diary_entries`
-- privatny Storage bucket `moje-dni-photos`
-- RLS pravidla pre vlastne dennikove zaznamy a fotky
-
-Existujuce CigApp tabulky `packs`, `entries` a `days` nemenime.
-
-Frontend je staticky. Supabase kluc v `supabase-config.js` nie je servisny secret; ochranu dat robi RLS politika v databaze.
+Frontend je staticky a je urceny na nasadenie cez GitHub Pages. Koncove body v `supabase-config.js` su verejne; data chrani Neon Auth, RLS a kontrola JWT vo funkcii pre fotografie.
