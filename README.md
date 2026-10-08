@@ -12,3 +12,5 @@ Projekt pouziva samostatny Neon projekt `falling-frog-37246536`:
 - autentifikovanu Neon Function `mojedniphotos` pre pristup k fotografiam
 
 Frontend je staticky a je urceny na nasadenie cez GitHub Pages. Koncove body v `neon-config.js` su verejne; data chrani Neon Auth, RLS a kontrola JWT vo funkcii pre fotografie.
+
+`neon-sdk.js` je browser bundle generovany z `neon-client-source.js` a `@neondatabase/neon-js`; produkcna aplikacia preto nezavisi od externej JavaScript CDN.

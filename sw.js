@@ -1,10 +1,10 @@
-const CACHE_NAME = "moje-dni-v11-neon-modules";
+const CACHE_NAME = "moje-dni-v12-local-neon-sdk";
 const ASSETS = [
   "./",
   "./index.html",
   "./styles.css",
   "./app-neon.js",
-  "./neon-client.js",
+  "./neon-sdk.js",
   "./neon-config.js",
   "./icon.svg",
   "./icon-192.png",

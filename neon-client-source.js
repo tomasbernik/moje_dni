@@ -1,4 +1,4 @@
-import { createClient, SupabaseAuthAdapter } from "https://esm.sh/@neondatabase/neon-js@0.7.0-beta?bundle";
+import { createClient, SupabaseAuthAdapter } from "@neondatabase/neon-js";
 
 export function createMojeDniClient(config) {
   if (!config.authUrl || !config.dataApiUrl) return null;

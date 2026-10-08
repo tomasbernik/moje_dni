@@ -1,5 +1,5 @@
 import { NEON_CONFIG } from "./neon-config.js";
-import { createMojeDniClient } from "./neon-client.js";
+import { createMojeDniClient } from "./neon-sdk.js";
 
 const STORAGE_KEY = "moje-dni.entries.v1";
 
